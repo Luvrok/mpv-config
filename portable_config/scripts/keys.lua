@@ -6,15 +6,20 @@
 --   KEY  command  # what it does   a row. #! (uosc menu) and #@ (inputevent)
 --                                  parts are skipped, a binding with only a
 --                                  #! title shows the title's last part
+--   #? KEYS  what they do          a row for keys bound elsewhere (menus,
+--                                  plugins): alternatives split by " / ",
+--                                  two spaces before the text
 -- a binding without a comment isn't shown. bindings of a section that say
--- the same thing share a row: "back 5 s  ← / a".
+-- the same thing share a row: "back 5 s  ← / h". g-g is the sequence g g.
 --
--- typing searches like uosc's menus, esc clears the search, then closes
+-- / searches like vim and uosc's menus, enter keeps the result, esc drops
+-- it. q, esc or ? close. other keys still reach mpv, so they can be tried
 
 local assdraw = require('mp.assdraw')
 
 local o = {
-	columns = 3,
+	-- at most, fewer when they'd have to shrink more to fit the window
+	columns = 4,
 	title = 'Hotkeys',
 }
 require('mp.options').read_options(o, 'keys')
@@ -73,8 +78,15 @@ local names = {
 }
 local mods = {shift = true, ctrl = true, alt = true, meta = true}
 
--- "Ctrl+LEFT" -> ctrl ←, "W" -> shift w: a keycap each, modifiers dim
+-- "Ctrl+LEFT" -> ctrl ←, "W" -> shift w, "g-g" -> g g: a keycap each,
+-- modifiers dim
 local function keycaps(key)
+	local first, others = key:match('^(.-[^-])%-(.+)$')
+	if first then
+		local caps = keycaps(first)
+		for _, c in ipairs(keycaps(others)) do caps[#caps + 1] = c end
+		return caps
+	end
 	local caps, rest = {}, key
 	while true do
 		local m, r = rest:match('^([^+]+)%+(.+)$')
@@ -114,8 +126,25 @@ local function parse()
 	if not file then return {} end
 
 	local secs, sec = {}, nil
+	local function add(key, what)
+		if not sec then
+			sec = {name = '', rows = {}}
+			secs[#secs + 1] = sec
+		end
+		local row
+		for _, r in ipairs(sec.rows) do if r.what == what then row = r end end
+		if not row then
+			row = {what = what, keys = {}, text = (sec.name .. ' ' .. what):lower()}
+			sec.rows[#sec.rows + 1] = row
+		end
+		for _, k in ipairs(row.keys) do if k == key then return end end
+		row.keys[#row.keys + 1] = key
+		row.text = row.text .. ' ' .. key:lower()
+	end
+
 	for line in file:lines() do
 		local head = line:match('^##%s+([^#].-)[%s#]*$')
+		local doc_keys, doc_what = line:match('^#%?%s+(.-%S)%s%s+(%S.-)%s*$')
 		if head then
 			sec = nil
 			for _, s in ipairs(secs) do if s.name == head then sec = s end end
@@ -123,27 +152,12 @@ local function parse()
 				sec = {name = head, rows = {}}
 				secs[#secs + 1] = sec
 			end
+		elseif doc_keys then
+			for key in (doc_keys .. ' / '):gmatch('(.-) / ') do add(trim(key), doc_what) end
 		elseif not line:match('^%s*#') then
 			local key, comment = line:match('^%s*(%S+)%s+[^#]*#(.*)$')
 			local what = key and describe(comment)
-			if what then
-				if not sec then
-					sec = {name = '', rows = {}}
-					secs[#secs + 1] = sec
-				end
-				local row
-				for _, r in ipairs(sec.rows) do if r.what == what then row = r end end
-				if not row then
-					row = {what = what, keys = {}, text = (sec.name .. ' ' .. what):lower()}
-					sec.rows[#sec.rows + 1] = row
-				end
-				local seen = false
-				for _, k in ipairs(row.keys) do if k == key then seen = true end end
-				if not seen then
-					row.keys[#row.keys + 1] = key
-					row.text = row.text .. ' ' .. key:lower()
-				end
-			end
+			if what then add(key, what) end
 		end
 	end
 	file:close()
@@ -220,6 +234,7 @@ end
 
 local secs = {}
 local query = ''
+local typing = false -- / is typing a search
 local shown = false
 local fade = 0 -- the whole sheet's opacity
 local opened_at = 0
@@ -322,7 +337,7 @@ local function relayout()
 	local full = mp.get_property_native('fullscreen') or mp.get_property_native('window-maximized')
 	local scale = hidpi * (full and ui.scale_fullscreen or ui.scale)
 
-	local function measure(sc)
+	local function measure(sc, cols)
 		local s = sizes(sc)
 		local col_w = width_of(o.title, false) * s.font
 		for _, sec in ipairs(secs) do
@@ -333,7 +348,7 @@ local function relayout()
 			end
 		end
 		s.col_w = math.ceil(col_w + s.ipad * 2)
-		s.cols = clamp(1, o.columns, math.max(1, #secs))
+		s.cols = cols
 		local body = 0
 		for _, col in ipairs(split(secs, s.cols, function(sec) return sec_height(s, sec) end)) do
 			local h = 0
@@ -347,10 +362,15 @@ local function relayout()
 		return s
 	end
 
-	local s = measure(scale)
+	-- the column count that needs the least shrinking, then the fewest.
 	-- too big for the window: everything a bit smaller
-	local fit = math.min(1, dims.w * 0.96 / s.w, dims.h * 0.94 / s.h)
-	if fit < 1 then s = measure(scale * fit) end
+	local s, fit, cols
+	for c = 1, clamp(1, o.columns, math.max(1, #secs)) do
+		local m = measure(scale, c)
+		local f = math.min(1, dims.w * 0.96 / m.w, dims.h * 0.9 / m.h)
+		if not fit or f > fit + 0.01 then s, fit, cols = m, f, c end
+	end
+	if fit < 1 then s = measure(scale * fit, cols) end
 	s.dw, s.dh = dims.w, dims.h
 	s.ax, s.ay = round((dims.w - s.w) / 2), round((dims.h - s.h) / 2)
 	layout = s
@@ -369,22 +389,28 @@ local function render()
 	local ax, ay, bx, by = s.ax, s.ay, s.ax + s.w, s.ay + s.h
 	rect(ass, ax, ay, bx, by, bg, opacity.menu * fade, s.radius > 0 and s.radius + s.pad or 0)
 
-	-- the header is uosc's palette search: an icon, then the query or the
-	-- title as the placeholder on the right
+	-- the header is uosc's: the title, or while searching its search row,
+	-- an icon and the query on the right
 	local hax, hbx = ax + s.pad + round(s.ipad / 2), bx - s.pad - round(s.ipad / 2)
 	local hay, hby = ay + s.pad, ay + s.pad + s.head_h
 	local hcy = round((hay + hby) / 2)
-	local icon = round(s.font * 1.3)
-	txt(ass, hax + icon / 2, hcy, 5, 'search', {
-		font = 'MaterialIconsRound-Regular', size = icon, bold = false, color = fg, opacity = fade,
-	})
-	local field = string.format('\\clip(%d,%d,%d,%d)', hax + icon + s.ipad, hay, hbx, hby)
-	if query ~= '' then
-		txt(ass, hbx, hcy, 6, ass_escape(query) .. '\239\187\191', {size = s.font, opacity = fade, clip = field})
-		local half, thick = round(s.font * 0.6), round(s.font / 12)
-		rect(ass, hbx + 1, hcy - half, hbx + 1 + thick, hcy + half, fg, fade)
+	if typing or query ~= '' then
+		local icon = round(s.font * 1.3)
+		txt(ass, hax + icon / 2, hcy, 5, 'search', {
+			font = 'MaterialIconsRound-Regular', size = icon, bold = false, color = fg, opacity = fade,
+		})
+		local field = string.format('\\clip(%d,%d,%d,%d)', hax + icon + s.ipad, hay, hbx, hby)
+		if query ~= '' then
+			txt(ass, hbx, hcy, 6, ass_escape(query) .. '\239\187\191', {size = s.font, opacity = fade, clip = field})
+		else
+			txt(ass, hbx, hcy, 6, 'type to search', {size = s.font, italic = true, opacity = 0.4 * fade, clip = field})
+		end
+		if typing then
+			local half, thick = round(s.font * 0.6), round(s.font / 12)
+			rect(ass, hbx + 1, hcy - half, hbx + 1 + thick, hcy + half, fg, fade)
+		end
 	else
-		txt(ass, hbx, hcy, 6, ass_escape(o.title), {size = s.font, italic = true, opacity = 0.4 * fade, clip = field})
+		txt(ass, (hax + hbx) / 2, hcy, 5, ass_escape(o.title), {size = s.font, bold = true, opacity = fade})
 	end
 	rect(ass, ax, hby + s.pad - s.line, bx, hby + s.pad, fg, 0.2 * fade)
 
@@ -477,17 +503,29 @@ end
 
 local function type_char(e)
 	if e.event == 'up' or not e.key_text then return end
-	if query == '' then
-		-- ? opened it and closes it, mpv gives it to ANY_UNICODE first
-		if e.key_text == '?' then return close() end
-		if e.key_text == ' ' then return end
-	end
+	if query == '' and e.key_text == ' ' then return end
 	set_query(query .. e.key_text)
 end
 
-local function backspace()
-	-- a whole utf-8 character
-	set_query(query:gsub('[%z\1-\127\194-\244][\128-\191]*$', ''))
+-- while / is typing a search these keys are text, after it they reach mpv
+local typing_binds = {
+	{'ANY_UNICODE', type_char, {complex = true, repeatable = true}},
+	{'BS', function()
+		-- a whole utf-8 character
+		set_query(query:gsub('[%z\1-\127\194-\244][\128-\191]*$', ''))
+	end, {repeatable = true}},
+	{'Ctrl+BS', function() set_query('') end},
+	{'Ctrl+w', function() set_query('') end},
+}
+
+local function search(on, keep)
+	typing = on
+	for i, b in ipairs(typing_binds) do
+		if on then mp.add_forced_key_binding(b[1], 'keys-type-' .. i, b[2], b[3])
+		else mp.remove_key_binding('keys-type-' .. i) end
+	end
+	if not on and not keep then query = '' end
+	render()
 end
 
 local function on_click()
@@ -496,16 +534,17 @@ local function on_click()
 	if not (m and s and m.x >= s.ax and m.x <= s.ax + s.w and m.y >= s.ay and m.y <= s.ay + s.h) then close() end
 end
 
+-- esc: drop the search, then close. enter: keep the search, then close
 local binds = {
-	{'ESC', function() if query ~= '' then set_query('') else close() end end},
-	{'ENTER', function() close() end},
-	{'KP_ENTER', function() close() end},
-	{'BS', backspace, {repeatable = true}},
-	{'Ctrl+BS', function() set_query('') end},
-	{'Ctrl+w', function() set_query('') end},
+	{'ESC', function()
+		if typing or query ~= '' then search(false) else close() end
+	end},
+	{'ENTER', function() if typing then search(false, true) else close() end end},
+	{'KP_ENTER', function() if typing then search(false, true) else close() end end},
+	{'/', function() search(true, true) end},
+	{'q', function() close() end},
 	{'MBTN_LEFT', on_click},
 	{'MBTN_RIGHT', function() close() end},
-	{'ANY_UNICODE', type_char, {complex = true, repeatable = true}},
 }
 
 local function open()
@@ -521,6 +560,7 @@ end
 close = function()
 	if not shown then return end
 	shown = false
+	if typing then search(false, true) end
 	for i = 1, #binds do mp.remove_key_binding('keys-' .. i) end
 	animate(0, function()
 		overlay:remove()
