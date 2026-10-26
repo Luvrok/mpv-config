@@ -16,7 +16,10 @@ pin a commit of this repo and add both files on top of `portable_config`.
 - [InputEvent](https://github.com/natural-harmonia-gropius/input-event) - click, press and release bindings in `input.conf` (`#@click`).
 - [autoload](https://github.com/mpv-player/mpv/blob/master/TOOLS/lua/autoload.lua) - the rest of the folder becomes the playlist.
 - [autodeint](https://github.com/mpv-player/mpv/blob/master/TOOLS/lua/autodeint.lua) - picks a deinterlacer on demand (`Ctrl+d`).
-- `keys.lua` - the hotkey cheat sheet (`?`), made from the comments in `input.conf`, in uosc's menu look. `/` searches, `q` or `Esc` closes.
+- `keys.lua` - the hotkey cheat sheet (`?`), made from the comments in `input.conf`, in uosc's menu look. It opens typing a search, `Enter` keeps the result and lets keys through to try them, `Esc` clears, then closes.
+- `find.lua` - a fuzzy finder (`Ctrl+p`) over `~/downloads`, `~/documents/videos` and `/media/outer-1` (`script-opts/find.conf` takes `roots`), newest first, in a uosc palette menu. `Enter` plays, `Shift+Enter` queues.
+- `layout.lua` - binds every `input.conf` key once more for the russian layout, at the same physical key (`р` for `h`, `п-п` for `g-g`). Searches also try what was typed as the other layout's keys.
+- `resume.lua` - with `save-position-on-quit=yes` every quit resumes, closing the window too. This drops the saved position at the end of a file, so a finished one starts over.
 
 The dotfiles add these from nixpkgs (`mpvScripts`), their settings are in
 `script-opts` here:
@@ -34,7 +37,9 @@ The dotfiles add these from nixpkgs (`mpvScripts`), their settings are in
 Marked `Fork:` in the code:
 
 - Menus take vim keys: `j`/`k`, `h` back (a folder up in the file browser),
-  `l` open, `gg`/`G`, `Ctrl+u`/`Ctrl+d`, `q` close. `menu_type_to_search=no`
+  `l` open, `gg`/`G`, `Ctrl+u`/`Ctrl+d`, `q` close, and telescope's
+  `Ctrl+j`/`Ctrl+k` and `Ctrl+n`/`Ctrl+p`, which also move while a search is
+  typed. The same keys on the russian layout too. `menu_type_to_search=no`
   frees the letters, `/` searches.
 - `script-message-to uosc open-file <directory>` opens the file browser in a
   directory, `g l` in `input.conf` uses it for the library.
