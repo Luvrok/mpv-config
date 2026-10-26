@@ -1065,6 +1065,30 @@ function Menu:enable_key_bindings()
 		end
 	end
 
+	-- Fork: vim keys. Letters are free with `menu_type_to_search=no`, and while
+	-- a search is typed `ANY_UNICODE` gets them first.
+	local vim_keys = {
+		j = 'down+', k = 'up+', h = 'bs', l = 'enter', G = 'end', q = 'esc', ['ctrl+d'] = 'pgdwn+', ['ctrl+u'] = 'pgup+',
+	}
+	for key, as in pairs(vim_keys) do
+		local repeatable = as:sub(-1) == '+'
+		local shortcut = create_shortcut(repeatable and as:sub(1, -2) or as)
+		self:add_key_binding(key, 'menu-binding-vim-' .. key, self:create_action(function(info)
+			self:handle_shortcut(shortcut, info)
+		end), {repeatable = repeatable, complex = true})
+	end
+	-- gg: a second g within a second goes to the top
+	local last_g = 0
+	self:add_key_binding('g', 'menu-binding-vim-g', self:create_action(function(info)
+		if info.event == 'up' then return end
+		if mp.get_time() - last_g < 1 then
+			last_g = 0
+			self:handle_shortcut(create_shortcut('home'), info)
+		else
+			last_g = mp.get_time()
+		end
+	end), {complex = true})
+
 	self:search_ensure_key_bindings()
 end
 

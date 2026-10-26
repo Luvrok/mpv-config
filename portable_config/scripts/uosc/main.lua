@@ -1128,6 +1128,8 @@ end)
 
 --[[ MESSAGE HANDLERS ]]
 
+-- Fork: `script-message-to uosc open-file <directory>` browses that directory.
+mp.register_script_message('open-file', function(directory) open_open_file_menu(directory) end)
 mp.register_script_message('show-submenu', function(id) toggle_menu_with_items({submenu = id}) end)
 mp.register_script_message('show-submenu-blurred', function(id)
 	toggle_menu_with_items({submenu = id, mouse_nav = true})

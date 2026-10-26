@@ -767,8 +767,9 @@ function open_stream_quality_menu()
 	end)
 end
 
-function open_open_file_menu()
-	if Menu:is_open('open-file') then
+---@param at_directory? string Fork: open this directory instead of the current file's.
+function open_open_file_menu(at_directory)
+	if Menu:is_open('open-file') and not at_directory then
 		Menu:close()
 		return
 	end
@@ -778,7 +779,15 @@ function open_open_file_menu()
 	local directory
 	local active_file
 
-	if state.path == nil or is_protocol(state.path) then
+	if at_directory then
+		directory = mp.command_native({'expand-path', at_directory})
+		local info = utils.file_info(directory)
+		if not info or not info.is_dir then
+			mp.commandv('show-text', t('No such folder') .. ': ' .. directory, 3000)
+			return
+		end
+		active_file = state.path and normalize_path(state.path)
+	elseif state.path == nil or is_protocol(state.path) then
 		directory = options.default_directory
 		active_file = nil
 	else
