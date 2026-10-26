@@ -1,177 +1,68 @@
-# Personal mpv Configuration for Windows
+# mpv config
 
-<p align="center"><img width=100% src="https://github.com/user-attachments/assets/7d6b7cfd-41c7-4617-b573-933b4b3bd564" alt="mpv screenshot"></p>
-<p align="center"><img width=100% src="https://github.com/user-attachments/assets/bfd85e57-f244-4de4-8bf9-750723c51568" alt="mpv screenshot"></p>
+A fork of [Zabooby/mpv-config](https://github.com/Zabooby/mpv-config) kept at
+its September 2024 look (uosc 5.6, line timeline, black menus), cut down to
+what is used on Linux.
 
-## Overview
-Just my personal config files for use in [mpv](https://mpv.io/), a free, open-source, & cross-platform media player, with a focus on quality and a practical yet comfortable viewing experience. Contains tuned profiles (for up/downscaling, live action, anime & HDR content), custom key bindings, a GUI, as well as multiple scripts, shaders & filters, all serving different functions. Suitable for both high and low-end pc's (with some tweaks).
+`mpv.conf` and `input.conf` are not here: the NixOS dotfiles
+([Luvrok/dotfiles](https://github.com/Luvrok/dotfiles), `nixos/overlays/mpv`)
+pin a commit of this repo and add both files on top of `portable_config`.
 
-Before installing, please take your time to read this whole README as common issues can be easily solved by simply reading carefully.
+## Scripts
 
-## Scripts and Shaders
-- [uosc](https://github.com/darsain/uosc) - Adds a minimalist but highly customisable GUI.
-- [evafast](https://github.com/po5/evafast) - Fast-forwarding and seeking on a single key.
-- [thumbfast](https://github.com/po5/thumbfast) - High-performance on-the-fly thumbnailer.
-- [memo](https://github.com/po5/memo) - A recent files/history menu for mpv with optional uosc integration.
-- [InputEvent](https://github.com/natural-harmonia-gropius/input-event) - Enhanced input.conf with better, conflict-free, low-latency event mechanisms.
-- [autodeint](https://github.com/mpv-player/mpv/blob/master/TOOLS/lua/autodeint.lua) - Automatically deinterlace the video by using lavfi's idet filter to detect interlaced content.
-- [autoload](https://github.com/mpv-player/mpv/blob/master/TOOLS/lua/autoload.lua) - Automatically load playlist entries before and after the currently playing file, by scanning the directory.
-- [webtorrent-mpv-hook](https://github.com/mrxdst/webtorrent-mpv-hook) - Adds a hook that allows mpv to stream torrents. It provides an osd overlay to show info/progress.
-    - **This script requires some extra setup, follow the simple installation steps [here](https://github.com/mrxdst/webtorrent-mpv-hook#install)**.
-    - **Point to the same location specified in the File Structure section below, when installing the webtorrent.js file.**
-- - - 
-- [nnedi3 and ravu](https://github.com/bjin/mpv-prescalers) - User shaders for prescaling.
-- [FSRCNN](https://github.com/igv/FSRCNN-TensorFlow/releases) - Prescaler based on layered convolutional networks.
-- [AniSD ArtCNN](https://github.com/Sirosky/Upscale-Hub/releases/tag/AniSD-ArtCNN) - ArtCNN shader for standard definition anime content.
-- [Anime4k](https://github.com/bloc97/Anime4K) - Shaders designed to scale and enhance anime. Includes shaders for sharpening and upscaling.
-- [nlmeans](https://github.com/AN3223/dotfiles/blob/master/.config/mpv/shaders/) - A featureful implementation of the non-local Means algorithm, it does both denoising and adaptive sharpening.
-- [Ani4K v2 ArtCNN](https://github.com/Sirosky/Upscale-Hub/releases/tag/Ani4k-v2-ArtCNN) - Targets modern anime, from high quality Blu-ray to crappy WEB releases, for upscaling to either 2K or 4K.
-- [SSimDownscaler, SSimSuperRes, KrigBilateral, Adaptive Sharpen](https://gist.github.com/igv) 
-    - Adaptive Sharpen: A sharpening shader.
-    - SSimDownscaler: Perceptually based downscaler.
-    - KrigBilateral: Chroma scaler that uses luma information for high quality upscaling.
-    - SSimSuperRes: Make corrections to the image upscaled by mpv built-in scaler (removes ringing artifacts and restores original  sharpness).
-   
-## Installation (on Windows)
+- [uosc](https://github.com/tomasklaen/uosc) 5.6 - the UI: timeline, controls, menus. Patched here, see below.
+- [thumbfast](https://github.com/po5/thumbfast) - timeline thumbnails.
+- [memo](https://github.com/po5/memo) - watch history (`Ctrl+h`).
+- [InputEvent](https://github.com/natural-harmonia-gropius/input-event) - click, press and release bindings in `input.conf` (`#@click`).
+- [autoload](https://github.com/mpv-player/mpv/blob/master/TOOLS/lua/autoload.lua) - the rest of the folder becomes the playlist.
+- [autodeint](https://github.com/mpv-player/mpv/blob/master/TOOLS/lua/autodeint.lua) - picks a deinterlacer on demand (`Ctrl+d`).
+- `keys.lua` - the hotkey cheat sheet (`?`), made from the comments in `input.conf`, in uosc's menu look. It opens typing a search, `Enter` keeps the result and lets keys through to try them, `Esc` clears, then closes.
+- `find.lua` - a fuzzy finder (`Ctrl+p`) over `~/downloads`, `~/documents/videos` and `/media/outer-1` (`script-opts/find.conf` takes `roots`), newest first, in a uosc palette menu. `Enter` plays, `Shift+Enter` queues.
+- `layout.lua` - binds every `input.conf` key once more for the russian layout, at the same physical key (`р` for `h`, `п-п` for `g-g`). Searches also try what was typed as the other layout's keys.
+- `resume.lua` - with `save-position-on-quit=yes` every quit resumes, closing the window too. This drops the saved position at the end of a file, so a finished one starts over.
 
-(Not tested on Linux and macOS but once mpv is installed, copying the contents of my `portable_config` into the [relevant](https://mpv.io/manual/master/#files) folders should be sufficient. Some settings in [mpv.conf](https://github.com/Zabooby/mpv-config/blob/main/portable_config/mpv.conf) may need to be changed due to compatibility issues. Check console for any errors.)
+The dotfiles add these from nixpkgs (`mpvScripts`), their settings are in
+`script-opts` here:
 
-* Download the latest 64bit (or 64bit-v3 for newer CPUs) mpv Windows build by shinchiro [here](https://mpv.io/installation/) or directly from [here](https://github.com/shinchiro/mpv-winbuild-cmake/releases) and extract its contents into a folder of your choice (mine is called mpv). This is now your mpv folder and can be placed wherever you want. 
-* Run `mpv-install.bat`, which is located in the `installer` folder (see File Structure section), with administrator privileges by right-clicking and selecting run as administrator, after it's done, you'll get a prompt to open Control Panel and set mpv as the default player.
-* Download and extract the `portable_config` folder from this repo to the mpv folder you just made. 
-* Add file paths, to 2 files in the [script-opts](https://github.com/Zabooby/mpv-config/tree/main/portable_config/script-opts) folder (detailed in the File Structure section), to match your preferences. 
-* **Adjust relevant settings in [mpv.conf](https://github.com/Zabooby/mpv-config/blob/main/portable_config/mpv.conf) & [profiles.conf](https://github.com/Zabooby/mpv-config/blob/main/portable_config/profiles.conf) to fit your system and preferences, use the [manual](https://mpv.io/manual/master/) to find out what different options do or open an issue if you need any help.**
-* For mpv updates, right click updater.bat and run as administrator, then follow the instructions. There will be an option to install yt-dlp to be able to stream YouTube videos and any other websites supported by [yt-dlp,](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) if you want. Once the initial run of updater.bat has completed a settings.xml file will be generated to save your preferences. 
-* You're all set up. Go watch some videos!
+- [mpris](https://github.com/hoyon/mpv-mpris) - the desktop's media controls see mpv.
+- [videoclip](https://github.com/Ajatt-Tools/videoclip) - `c` cuts a clip: `s` start, `e` end, `c` save. 1080p H.264 to the XDG videos folder, visible subtitles burned in.
+- [SmartSkip](https://github.com/Eisa01/mpv-scripts) - `>` skips an opening or ending (or to the next silence without chapters). It only prompts, never skips by itself, `Ctrl+.` turns the prompts off.
+- [autosubsync](https://github.com/joaquintorres/autosubsync-mpv) - `n` syncs subtitles to the audio with ffsubsync.
+- [reload](https://github.com/4e6/mpv-reload) - `r` reopens the file at the same spot, and stuck streams by itself.
+- [UndoRedo](https://github.com/Eisa01/mpv-scripts) - `Ctrl+o` / `Ctrl+i` go back and forth between seeks, like vim's jumplist.
+- [subtitle-lines](https://github.com/christoph-heinrich/mpv-subtitle-lines) - `/` lists the subtitle lines in a uosc menu, enter jumps to one.
 
-After following the steps above, your mpv folder should have the following structure:
+## uosc patches
 
-## File Structure (on Windows)
+Marked `Fork:` in the code:
+
+- Menus take vim keys: `j`/`k`, `h` back (a folder up in the file browser),
+  `l` open, `gg`/`G`, `Ctrl+u`/`Ctrl+d`, `q` close, and telescope's
+  `Ctrl+j`/`Ctrl+k` and `Ctrl+n`/`Ctrl+p`, which also move while a search is
+  typed. The same keys on the russian layout too. `menu_type_to_search=no`
+  frees the letters, `/` searches.
+- `script-message-to uosc open-file <directory>` opens the file browser in a
+  directory, `g l` in `input.conf` uses it for the library.
+
+## input.conf
+
+The cheat sheet and the right click menu both come from `input.conf`:
 
 ```
-mpv
-|
-├── doc
-│   ├── manual.pdf                            
-│   └── mpbindings.png                    # Default key bindings if not overridden in input.conf
-│
-├── installer
-│   ├── mpv-icon.ico
-│   ├── mpv-install.bat                   # Run with administrator privileges to install mpv
-│   ├── mpv-uninstall.bat                 # Run with administrator privileges to uninstall mpv
-│   └── updater.ps1
-│
-├── portable_config                       # This is where my config is placed
-│   ├── cache                             # Created automatically  
-│   │   ├──  shaders_cache
-│   │   ├──  watch_later                  
-│   │
-│   ├── fonts
-│   │   ├── ClearSans-Bold.ttf
-│   │   ├── JetBrainsMono-Regular.ttf
-|   |   ├── uosc_icons.otf
-|   |   └── uosc_textures.ttf
-│   │
-│   ├── script-opts                       # Contains configuration files for scripts
-|   |   ├── console.conf
-|   |   ├── evafast.conf 
-|   |   ├── memo.conf
-|   |   ├── memo-history.log              # Created automatically 
-│   │   ├── thumbfast.conf                    
-│   │   ├── uosc.conf                     # Set desired default directory for uosc menu here
-│   │   └── webtorrent.conf               # Specify where to save downloaded files here
-│   │
-│   ├── scripts      
-│   │   ├── uosc              
-│   │       ├── bin 
-|   |           ├── ziggy-darwin
-|   |           ├── ziggy-linux
-|   |           ├── ziggy-windows.exe
-│   │       ├── char_conv
-|   |           ├── zh.json
-│   │       ├── elements 
-|   |           ├── BufferingIndicator.lua
-|   |           ├── Button.lua
-|   |           ├── Controls.lua
-|   |           ├── Curtain.lua
-|   |           ├── CycleButton.lua
-|   |           ├── Element.lua
-|   |           ├── Elements.lua
-|   |           ├── ManagedButton.lua
-|   |           ├── Menu.lua
-|   |           ├── PauseIndicator.lua
-|   |           ├── Speed.lua
-|   |           ├── Timeline.lua
-|   |           ├── TopBar.lua
-|   |           ├── Updater.lua
-|   |           ├── Volume.lua
-|   |           └── WindowBorder.lua
-|   |       ├── intl
-|   |           ├── de.lua
-|   |           ├── es.lua
-|   |           ├── fr.json
-|   |           ├── pl.json
-|   |           ├── ro.json
-|   |           ├── ru.json
-|   |           ├── tr.json
-|   |           ├── uk.json
-|   |           └── zh-hans.json
-|   |       ├── lib
-|   |           ├── ass.lua
-|   |           ├── buttons.lua
-|   |           ├── char_conv.lua
-|   |           ├── cursor.lua
-|   |           ├── fzy.lua
-|   |           ├── intl.lua
-|   |           ├── menus.lua
-|   |           ├── std.lua
-|   |           ├── text.lua
-|   |           └── utils.lua
-|   |       └── main.lua
-│   │
-│   │   ├── autodeint.lua
-│   │   ├── autoload.lua 
-│   │   ├── evafast.lua                   # Activated by holding right arrow key
-│   │   ├── inputevent.lua
-|   |   ├── memo.lua
-│   │   ├── thumbfast.lua                     
-│   │   └── webtorrent.js                 # Point here when installing the webtorrent script
-│   │
-│   ├── shaders                          
-│   │   ├── A4K_Clamp_Highlights.glsl                         
-│   │   ├── A4K_Restore_CNN_Soft_M.glsl
-│   │   ├── adasharp_luma.glsl
-│   │   ├── Ani4Kv2_ArtCNN_C4F32_i2.glsl
-│   │   ├── AniSD_ArtCNN_C4F32_i4.glsl
-│   │   ├── F8.glsl
-│   │   ├── F16.glsl
-│   │   ├── krigbl.glsl
-│   │   ├── nlmeans_luma.glsl
-│   │   ├── nnedi3-nns32-win8x4.glsl       
-│   │   ├── nnedi3-nns64-win8x4.glsl
-│   │   ├── ravu_z_ar_r3.glsl
-│   │   ├── ssimds.glsl
-│   │   └── ssimsr.glsl
-│   │
-|   ├── fonts.conf                        # Delete the duplicate made when installing mpv
-│   ├── input.conf                        # Customise uosc menu here
-│   ├── mpv.conf                          
-|   └── profiles.conf                     
-|   
-├── d3dcompiler_43.dll
-├── mpv.com
-├── mpv.exe                               # The mpv executable file
-├── settings.xml                          # Created after initial run of updater.bat
-├── updater.bat                           # Run with administrator privileges to update mpv
-└── yt-dlp.exe                            
+## Playback                                       a cheat sheet section
+SPACE  cycle pause  # play / pause                 a row of it
+f      cycle fullscreen  # fullscreen  #! Video > Fullscreen
+#      cycle deband                    #! Video > Deband
+#? j / k   down / up                   a row for keys bound elsewhere
 ```
 
-## Key Bindings
-Custom key bindings can be added/edited in the [input.conf](https://github.com/Zabooby/mpv-config/blob/main/portable_config/input.conf) file. Refer to the [manual](https://mpv.io/manual/master/) and [uosc](https://github.com/tomasklaen/uosc#commands) commands for making any changes. Default key bindings can be seen from the [input.conf](https://github.com/Zabooby/mpv-config/blob/main/portable_config/input.conf) file but most of the player functions can be used through the menu accessed by `Right Click` and the buttons above the timeline as seen in the images above.
+A binding without a comment isn't on the sheet. Bindings of a section with the
+same comment share a row (`h / l / ← / →  back / forward 5 s`), `g-g` is the
+sequence `g g`. The `#!` part is uosc's menu entry, a line starting with `#`
+is a menu entry without a key.
 
-## Useful Links
+## Profiles
 
-* [mpv wiki](https://github.com/mpv-player/mpv/wiki) - Official wiki with links to all user scripts/shaders, FAQ's, discussions and much more.
-    * [Awesome mpv](https://github.com/stax76/awesome-mpv) -  A curated list of the user resources in the wiki, listed in distinct sections for easier browsing.
-* [mpv manual](https://mpv.io/manual/master/) - Lists and explains all the settings and configuration options available including video/audio settings, scripting, and countless other customisations.
-* [To-do's](https://github.com/users/Zabooby/projects/1) - Just a list of things I'm currently testing, tracking or improving as well as major changes/improvements I've already implemented.
+`profiles.conf` downmixes 5.1 and 7.1 to stereo with the dialogue kept up,
+evens out loud and quiet parts of surround audio, and debands harder in any
+folder named `Anime`.

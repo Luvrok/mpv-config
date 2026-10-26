@@ -19,15 +19,14 @@ function open_command_menu(data, opts)
 			---@diagnostic disable-next-line: deprecated
 			mp.commandv(unpack(itable_join({'script-message-to'}, menu.root.callback, {utils.format_json(event)})))
 		elseif event.type == 'activate' then
-			-- Modifiers and actions are not available on basic non-callback mode menus.
-			-- `alt` modifier should activate without closing the menu.
-			if (event.modifiers == 'alt' or not event.modifiers) and not event.action then
+			-- Modifiers and actions are not available on basic non-callback mode menus
+			if not event.modifiers and not event.action then
 				run_command(event.value)
 			end
 			-- Convention: Only pure item activations should close the menu.
 			-- Using modifiers or triggering item actions should not.
 			if not event.keep_open and not event.modifiers and not event.action then
-				menu:close()
+				menu:request_close()
 			end
 		end
 	end
@@ -95,16 +94,10 @@ function create_self_updating_menu_opener(opts)
 		local actions = opts.actions or {}
 		if opts.on_move then
 			actions[#actions + 1] = {
-				name = 'move_up',
-				icon = 'arrow_upward',
-				label = t('Move up') .. ' (ctrl+up/pgup/home)',
-				filter_hidden = true,
+				name = 'move_up', icon = 'arrow_upward', label = t('Move up') .. ' (ctrl+up/pgup/home)',
 			}
 			actions[#actions + 1] = {
-				name = 'move_down',
-				icon = 'arrow_downward',
-				label = t('Move down') .. ' (ctrl+down/pgdwn/end)',
-				filter_hidden = true,
+				name = 'move_down', icon = 'arrow_downward', label = t('Move down') .. ' (ctrl+down/pgdwn/end)',
 			}
 		end
 		if opts.on_reload then
@@ -146,6 +139,7 @@ function create_self_updating_menu_opener(opts)
 			selected_index = selected_index,
 			on_move = opts.on_move and 'callback' or nil,
 			on_paste = opts.on_paste and 'callback' or nil,
+			on_close = 'callback',
 		}, function(event)
 			if event.type == 'activate' then
 				if (event.action == 'move_up' or event.action == 'move_down') and opts.on_move then
@@ -389,12 +383,13 @@ function open_file_navigation_menu(directory_path, handle_activate, opts)
 				name = 'subprocess',
 				capture_stdout = true,
 				playback_only = false,
-				args = {'fsutil', 'fsinfo', 'drives'},
+				args = {'wmic', 'logicaldisk', 'get', 'name', '/value'},
 			})
 			local items, selected_index = {}, 1
 
 			if process.status == 0 then
-				for drive in process.stdout:gmatch('(%a:)\\') do
+				for _, value in ipairs(split(process.stdout, '\n')) do
+					local drive = string.match(value, 'Name=([A-Z]:)')
 					if drive then
 						local drive_path = normalize_path(drive)
 						items[#items + 1] = {
@@ -475,6 +470,7 @@ function open_file_navigation_menu(directory_path, handle_activate, opts)
 		title = opts.title or '',
 		footnote = t('%s to go up in tree.', 'alt+up') .. ' ' .. t('Paste path or url to open.'),
 		items = {},
+		on_close = opts.on_close and 'callback' or nil,
 		on_paste = 'callback',
 	}
 
@@ -511,8 +507,7 @@ function open_file_navigation_menu(directory_path, handle_activate, opts)
 	end
 
 	---@param event MenuEventActivate
-	---@param only_if_dir? boolean Activate item only if it's a directory.
-	local function activate(event, only_if_dir)
+	local function activate(event)
 		local path = event.value
 		local is_drives = path == '{drives}'
 
@@ -530,25 +525,19 @@ function open_file_navigation_menu(directory_path, handle_activate, opts)
 
 		if info.is_dir and not event.modifiers and not event.action then
 			open_directory(path)
-		elseif not only_if_dir then
+		else
 			handle_activate(event)
 		end
 	end
-
 	menu = Menu:open(menu_data, function(event)
 		if event.type == 'activate' then
 			activate(event --[[@as MenuEventActivate]])
-		elseif event.type == 'back' or event.type == 'key' and itable_has({'alt+up', 'left'}, event.id) then
+		elseif event.type == 'back' or event.type == 'key' and event.id == 'alt+up' then
 			if back_path then open_directory(back_path) end
 		elseif event.type == 'paste' then
 			handle_activate({type = 'activate', value = event.value})
 		elseif event.type == 'key' then
-			if event.id == 'right' then
-				local selected_item = event.selected_item
-				if selected_item then
-					activate(table_assign({}, selected_item, {type = 'activate'}), true)
-				end
-			elseif event.id == 'ctrl+c' and event.selected_item then
+			if event.id == 'ctrl+c' and event.selected_item then
 				set_clipboard(event.selected_item.value)
 			end
 		elseif event.type == 'close' then
@@ -666,8 +655,7 @@ do
 						-- If command is already in menu, just append the key to it
 						if key ~= '#' and command ~= '' and target_menu.items_by_command[command] then
 							local hint = target_menu.items_by_command[command].hint
-							local key_human = keybind_to_human(key)
-							target_menu.items_by_command[command].hint = hint and hint .. ', ' .. key_human or key_human
+							target_menu.items_by_command[command].hint = hint and hint .. ', ' .. key or key
 						else
 							-- Separator
 							if title_part:sub(1, 3) == '---' then
@@ -676,7 +664,7 @@ do
 							elseif command ~= 'ignore' then
 								local item = {
 									title = title_part,
-									hint = not is_dummy and keybind_to_human(key) or nil,
+									hint = not is_dummy and key or nil,
 									value = command,
 								}
 								if command == '' then
@@ -715,7 +703,7 @@ function get_keybinds_items()
 		local id = bind.key .. '<>' .. bind.cmd
 		if not ids[id] then
 			ids[id] = true
-			items[#items + 1] = {title = bind.cmd, hint = keybind_to_human(bind.key) or bind.key, value = bind.cmd}
+			items[#items + 1] = {title = bind.cmd, hint = bind.key, value = bind.cmd}
 		end
 	end
 
@@ -779,8 +767,9 @@ function open_stream_quality_menu()
 	end)
 end
 
-function open_open_file_menu()
-	if Menu:is_open('open-file') then
+---@param at_directory? string Fork: open this directory instead of the current file's.
+function open_open_file_menu(at_directory)
+	if Menu:is_open('open-file') and not at_directory then
 		Menu:close()
 		return
 	end
@@ -790,7 +779,15 @@ function open_open_file_menu()
 	local directory
 	local active_file
 
-	if state.path == nil or is_protocol(state.path) then
+	if at_directory then
+		directory = mp.command_native({'expand-path', at_directory})
+		local info = utils.file_info(directory)
+		if not info or not info.is_dir then
+			mp.commandv('show-text', t('No such folder') .. ': ' .. directory, 3000)
+			return
+		end
+		active_file = state.path and normalize_path(state.path)
+	elseif state.path == nil or is_protocol(state.path) then
 		directory = options.default_directory
 		active_file = nil
 	else
@@ -894,13 +891,13 @@ function open_subtitle_downloader()
 		return
 	end
 
-	local search_suggestion, file_path, destination_directory = '', nil, nil
+	local search_suggestion, file_path = '', nil
+	local destination_directory = mp.command_native({'expand-path', '~~/subtitles'})
 	local credentials = {'--api-key', config.open_subtitles_api_key, '--agent', config.open_subtitles_agent}
 
 	if state.path then
 		if is_protocol(state.path) then
-			local title = mp.get_property_native('title')
-			if title and not is_protocol(title) then search_suggestion = title end
+			if not is_protocol(state.title) then search_suggestion = state.title end
 		else
 			local serialized_path = serialize_path(state.path)
 			if serialized_path then
@@ -909,12 +906,6 @@ function open_subtitle_downloader()
 				destination_directory = serialized_path.dirname
 			end
 		end
-	end
-
-	local force_destination = options.subtitles_directory:sub(1, 1) == '!'
-	if force_destination or not destination_directory then
-		local subtitles_directory = options.subtitles_directory:sub(force_destination and 2 or 1)
-		destination_directory = mp.command_native({'expand-path', subtitles_directory})
 	end
 
 	local handle_download, handle_search
@@ -1104,7 +1095,6 @@ function open_subtitle_downloader()
 			on_search = 'callback',
 			search_debounce = 'submit',
 			search_suggestion = search_suggestion,
-			search_submit = search_suggestion and #search_suggestion > 0,
 		},
 		function(event)
 			if event.type == 'activate' then
