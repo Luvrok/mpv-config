@@ -12,8 +12,9 @@
 -- a binding without a comment isn't shown. bindings of a section that say
 -- the same thing share a row: "back 5 s  ← / h". g-g is the sequence g g.
 --
--- / searches like vim and uosc's menus, enter keeps the result, esc drops
--- it. q, esc or ? close. other keys still reach mpv, so they can be tried
+-- it opens typing a search, like telescope. enter keeps the result and
+-- lets the keys reach mpv, to try them, / types again. esc clears the
+-- search, then closes, so do q (once typing is over) and ? or F1
 
 local assdraw = require('mp.assdraw')
 
@@ -243,9 +244,21 @@ local layout -- sizes for the current window, see relayout()
 
 local function ease(p) return 1 - (1 - p) ^ 3 end
 
+-- йцукен -> qwerty, the same keys: "ыги" typed on the wrong layout is "sub"
+local qwerty = {}
+do
+	local latin, i = [[qwertyuiop[]asdfghjkl;'zxcvbnm,.`]], 0
+	for c in ('йцукенгшщзхъфывапролджэячсмитьбюё'):gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+		i = i + 1
+		qwerty[c] = latin:sub(i, i)
+	end
+end
+
 local function words()
 	local out = {}
-	for w in query:lower():gmatch('%S+') do out[#out + 1] = w end
+	for w in query:lower():gmatch('%S+') do
+		out[#out + 1] = (w:gsub('[%z\1-\127\194-\244][\128-\191]*', qwerty))
+	end
 	return out
 end
 
@@ -403,7 +416,7 @@ local function render()
 		if query ~= '' then
 			txt(ass, hbx, hcy, 6, ass_escape(query) .. '\239\187\191', {size = s.font, opacity = fade, clip = field})
 		else
-			txt(ass, hbx, hcy, 6, 'type to search', {size = s.font, italic = true, opacity = 0.4 * fade, clip = field})
+			txt(ass, hbx, hcy, 6, 'search ' .. ass_escape(o.title:lower()), {size = s.font, italic = true, opacity = 0.4 * fade, clip = field})
 		end
 		if typing then
 			local half, thick = round(s.font * 0.6), round(s.font / 12)
@@ -503,7 +516,11 @@ end
 
 local function type_char(e)
 	if e.event == 'up' or not e.key_text then return end
-	if query == '' and e.key_text == ' ' then return end
+	if query == '' then
+		-- ? opened it and closes it, ANY_UNICODE gets it before input.conf
+		if e.key_text == '?' then return close() end
+		if e.key_text == ' ' then return end
+	end
 	set_query(query .. e.key_text)
 end
 
@@ -534,15 +551,16 @@ local function on_click()
 	if not (m and s and m.x >= s.ax and m.x <= s.ax + s.w and m.y >= s.ay and m.y <= s.ay + s.h) then close() end
 end
 
--- esc: drop the search, then close. enter: keep the search, then close
+-- esc: clear the search, then close. enter: keep it and stop typing, then
+-- close. й and . are q and / on the russian layout
 local binds = {
-	{'ESC', function()
-		if typing or query ~= '' then search(false) else close() end
-	end},
+	{'ESC', function() if query ~= '' then set_query('') else close() end end},
 	{'ENTER', function() if typing then search(false, true) else close() end end},
 	{'KP_ENTER', function() if typing then search(false, true) else close() end end},
 	{'/', function() search(true, true) end},
+	{'.', function() search(true, true) end},
 	{'q', function() close() end},
+	{'й', function() close() end},
 	{'MBTN_LEFT', on_click},
 	{'MBTN_RIGHT', function() close() end},
 }
@@ -554,6 +572,7 @@ local function open()
 	shown = true
 	opened_at = mp.get_time()
 	for i, b in ipairs(binds) do mp.add_forced_key_binding(b[1], 'keys-' .. i, b[2], b[3]) end
+	search(true, true)
 	animate(1)
 end
 
