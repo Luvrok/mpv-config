@@ -1066,9 +1066,15 @@ function Menu:enable_key_bindings()
 	end
 
 	-- Fork: vim keys. Letters are free with `menu_type_to_search=no`, and while
-	-- a search is typed `ANY_UNICODE` gets them first.
+	-- a search is typed `ANY_UNICODE` gets them first. The ctrl ones are
+	-- telescope's, they also move while a search is typed. The cyrillic ones
+	-- are the same keys on the russian layout, where `/` types `.`.
 	local vim_keys = {
 		j = 'down+', k = 'up+', h = 'bs', l = 'enter', G = 'end', q = 'esc', ['ctrl+d'] = 'pgdwn+', ['ctrl+u'] = 'pgup+',
+		['ctrl+j'] = 'down+', ['ctrl+k'] = 'up+', ['ctrl+n'] = 'down+', ['ctrl+p'] = 'up+',
+		['о'] = 'down+', ['л'] = 'up+', ['р'] = 'bs', ['д'] = 'enter', ['П'] = 'end', ['й'] = 'esc',
+		['ctrl+в'] = 'pgdwn+', ['ctrl+г'] = 'pgup+', ['ctrl+о'] = 'down+', ['ctrl+л'] = 'up+', ['ctrl+т'] = 'down+',
+		['ctrl+з'] = 'up+', ['.'] = '/', ['ctrl+а'] = '/',
 	}
 	for key, as in pairs(vim_keys) do
 		local repeatable = as:sub(-1) == '+'
@@ -1079,7 +1085,7 @@ function Menu:enable_key_bindings()
 	end
 	-- gg: a second g within a second goes to the top
 	local last_g = 0
-	self:add_key_binding('g', 'menu-binding-vim-g', self:create_action(function(info)
+	local function gg(info)
 		if info.event == 'up' then return end
 		if mp.get_time() - last_g < 1 then
 			last_g = 0
@@ -1087,7 +1093,9 @@ function Menu:enable_key_bindings()
 		else
 			last_g = mp.get_time()
 		end
-	end), {complex = true})
+	end
+	self:add_key_binding('g', 'menu-binding-vim-g', self:create_action(gg), {complex = true})
+	self:add_key_binding('п', 'menu-binding-vim-п', self:create_action(gg), {complex = true})
 
 	self:search_ensure_key_bindings()
 end
