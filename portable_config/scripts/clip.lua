@@ -1,12 +1,13 @@
--- clip: lossless cuts (c) in a uosc menu. the streams are copied, never
--- re-encoded, so the picture and the sound stay bit-identical. s and e take
--- the current time as the start and the end, a track can be picked for the
--- audio and the subtitles (or none of them), and the folder the clip goes to
--- is picked in a browser over the XDG folders and the disk. the file is
--- always an mkv, it holds any
--- codec the source has, subtitles and attached fonts included. copy means the
--- cut starts at the keyframe before the chosen time: the clip can open a few
--- seconds early, nothing is lost to an encoder
+-- clip: cuts (c) in a uosc menu. s and e take the current time as the start
+-- and the end, a track can be picked for the audio and the subtitles (or none
+-- of them), and the folder the clip goes to is picked in a browser over the
+-- XDG folders and the disk. the file is always an mkv, it holds any codec the
+-- source has, subtitles and attached fonts included.
+--
+-- exact mode (default) asks smartcut to frame-accurately re-encode only the
+-- GOPs at the cut points, leaving the rest bit-identical, and cuts the audio
+-- into flac on the side. copy mode copies everything and can only start on a
+-- keyframe, so the clip may open a few seconds early
 
 local utils = require('mp.utils')
 local input = require('mp.input')
@@ -18,12 +19,18 @@ local o = {
 	filename_template = '%n_%s-%e',
 	-- what opens the menu
 	key = 'c',
+	-- exact mode: near-lossless re-encodes the GOPs at the cut points with
+	-- smartcut, the rest is copied. lossless H.264 turns into High 4:4:4,
+	-- which some players cannot decode, so near-lossless is the default
+	smartcut = 'smartcut',
+	exact_quality = 'near-lossless',
 }
 require('mp.options').read_options(o, 'clip')
 
 local script = mp.get_script_name()
 local timings = {}
 local sel = {}
+local mode = 'exact'
 local home = mp.command_native({'expand-path', '~'})
 local folder_current = home
 local folder_typing = false
@@ -174,6 +181,7 @@ local function menu()
 		{title = 'Start', hint = clock(timings.start or 0, ':'), value = 'start', keep_open = true},
 		{title = 'End', hint = timings.stop and clock(timings.stop, ':') or 'end of file', value = 'end', keep_open = true},
 		{title = 'Reset', value = 'reset', keep_open = true},
+		{title = 'Mode', hint = mode == 'exact' and 'exact (smart cut)' or 'copy (keyframes)', value = 'mode', keep_open = true},
 		{separator = true},
 		{title = 'Output folder', hint = pretty_path(output_folder()), value = 'folder'},
 		{title = 'Audio', hint = audio.label, value = 'audio', keep_open = true},
@@ -392,6 +400,98 @@ local function keyframe_before(path, time)
 	return keyframe or time
 end
 
+-- the exact mode: smartcut re-encodes the GOPs that touch the cut points,
+-- everything between them is copied. audio is left out there and cut here
+-- with flac, which trims it sample-exactly, and the subtitles come from the
+-- smartcut result
+local function mux_exact(path, start, stop, temp, out)
+	local duration = string.format('%.3f', stop - start)
+	local args = {'ffmpeg', '-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-i', temp}
+	local inputs = 1
+	local maps = {}
+	for _, t in ipairs(tracks('video')) do
+		if not t.image and t['ff-index'] then
+			maps[#maps + 1] = '0:v:0'
+			break
+		end
+	end
+
+	local audio = chosen('audio')
+	if audio.value ~= 'none' then
+		for _, a in ipairs({'-ss', string.format('%.3f', start), '-t', duration, '-i', path}) do
+			args[#args + 1] = a
+		end
+		maps[#maps + 1] = inputs .. ':' .. audio.index
+		inputs = inputs + 1
+	end
+
+	local subs = chosen('sub')
+	if subs.value:sub(1, 2) == 'e:' then
+		for _, a in ipairs({'-ss', string.format('%.3f', start), '-t', duration, '-i', subs.file}) do
+			args[#args + 1] = a
+		end
+		maps[#maps + 1] = inputs .. ':s:0'
+	elseif subs.value ~= 'none' then
+		local n = 0
+		for _, t in ipairs(tracks('sub')) do
+			if not t.external then
+				if t['ff-index'] == subs.index then break end
+				n = n + 1
+			end
+		end
+		maps[#maps + 1] = '0:s:' .. n
+	end
+	maps[#maps + 1] = '0:t?'
+
+	for _, m in ipairs(maps) do
+		args[#args + 1] = '-map'
+		args[#args + 1] = m
+	end
+	for _, a in ipairs({
+		'-c', 'copy', '-c:a', 'flac',
+		'-map_metadata', '0', '-map_chapters', '-1',
+		'-avoid_negative_ts', 'make_zero',
+	}) do
+		args[#args + 1] = a
+	end
+	if audio.value == 'none' then args[#args + 1] = '-an' end
+	if subs.value == 'none' then args[#args + 1] = '-sn' end
+	args[#args + 1] = out
+
+	mp.command_native_async({
+		name = 'subprocess', args = args, capture_stdout = true, capture_stderr = true, playback_only = false,
+	}, function(success, res, err)
+		os.remove(temp)
+		if success and res and res.status == 0 then
+			notify('Clip saved: ' .. pretty_path(out), 6)
+		else
+			notify('Clip: ffmpeg failed: ' .. error_text(res, err), 10)
+		end
+	end)
+end
+
+local function cut_exact(path, start, stop, out)
+	local temp = string.format('%s/.clip-%d-%d.mkv', out:match('^(.*)/[^/]*$'),
+		os.time(), math.random(1, 1000000))
+	local args = {
+		o.smartcut, path, temp,
+		'--keep', string.format('%.3f,%.3f', start, stop),
+		'--quality', o.exact_quality,
+		'--audio', 'none',
+	}
+	notify('Clip: exact cut ' .. pretty_path(out), 9999)
+	mp.command_native_async({
+		name = 'subprocess', args = args, capture_stdout = true, capture_stderr = true, playback_only = false,
+	}, function(success, res, err)
+		if not success or not res or res.status ~= 0 then
+			os.remove(temp)
+			notify('Clip: smartcut failed: ' .. error_text(res, err), 10)
+			return
+		end
+		mux_exact(path, start, stop, temp, out)
+	end)
+end
+
 local function cut()
 	local path = mp.get_property('path')
 	if not path then
@@ -426,6 +526,11 @@ local function cut()
 		:gsub('%%s', function() return clock(start, '.') end)
 		:gsub('%%e', function() return clock(stop, '.') end) .. '.mkv'
 	local out = folder .. '/' .. filename
+
+	if mode == 'exact' then
+		cut_exact(path, start, stop, out)
+		return
+	end
 
 	local seek = keyframe_before(path, start)
 	local args = {'ffmpeg', '-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-ss', tostring(seek), '-i', path}
@@ -499,6 +604,9 @@ mp.register_script_message('menu-event', function(json)
 		set_end()
 	elseif e.value == 'reset' then
 		reset_timings()
+	elseif e.value == 'mode' then
+		mode = mode == 'exact' and 'copy' or 'exact'
+		update()
 	elseif e.value == 'folder' then
 		open_folder()
 	elseif e.value == 'audio' then

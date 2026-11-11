@@ -71,20 +71,18 @@ is a menu entry without a key.
 `c` opens the clip menu. `s` and `e` take the current time as the start and
 the end, `Esc` closes. The audio and the subtitles start from the tracks mpv
 has selected at that moment; the menu cycles them, `none` included, so a clip
-can have no sound or no subtitles. Enter on "Create clip" runs ffmpeg and the
-clip appears in the folder.
+can have no sound or no subtitles. Enter on "Create clip" runs the cut.
+
+`Mode` picks how it cuts:
+
+- `exact (smart cut)` (default) uses [smartcut](https://github.com/skeskinen/smartcut), the pinned fork in the dotfiles. Only the GOPs that touch the start and the end are re-encoded (near-lossless by default, `exact_quality` in `clip.conf`), everything between is copied bit for bit. The cut is frame-accurate; the audio is cut separately into FLAC, so it is sample-accurate too. `lossless` is available but H.264 then becomes High 4:4:4, which some players cannot decode.
+- `copy (keyframes)` only copies streams. It is bit-identical to the source but can start only at a keyframe, so the clip may open a few seconds early.
 
 The folder item opens a picker: the XDG Videos, Downloads and Documents, the
 subfolders of where you are, `..`, or a typed path, then "Use this folder". The
 choice is remembered in `~/.local/state/mpv/clip-output`. Until one is picked
 the XDG videos folder is used; `script-opts/clip.conf` can pin another one
 (`output_folder`), the name is `%n_%s-%e.mkv`.
-
-Nothing is re-encoded: video, audio, subtitles and attached fonts are copied
-stream by stream, so the picture and the sound are bit-identical to the
-source. The price of a copy is that a stream can start only at a keyframe, so
-the clip can open a few seconds before the chosen start (the end is exact).
-An external subtitle file is seeked to the same keyframe, so it stays in sync.
 
 The output is always `.mkv`: it holds any codec the source has, subtitle
 formats and their fonts included.
