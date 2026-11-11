@@ -157,6 +157,7 @@ local function menu()
 	return utils.format_json({
 		type = 'clip',
 		title = 'Clip',
+		on_close = 'callback',
 		callback = {script, 'menu-event'},
 		items = items,
 	})
@@ -166,7 +167,43 @@ local function update()
 	mp.commandv('script-message-to', 'uosc', 'update-menu', menu())
 end
 
+local function set_start()
+	timings.start = mp.get_property_number('time-pos')
+	update()
+end
+
+local function set_end()
+	timings.stop = mp.get_property_number('time-pos')
+	update()
+end
+
+local function reset_timings()
+	timings = {}
+	update()
+end
+
+-- s, e and r work while the menu is open, like videoclip's did, and go away
+-- with it so they keep their normal meaning otherwise
+local keys_bound = false
+
+local function bind_keys()
+	if keys_bound then return end
+	keys_bound = true
+	mp.add_forced_key_binding('s', 'clip-start', set_start)
+	mp.add_forced_key_binding('e', 'clip-end', set_end)
+	mp.add_forced_key_binding('r', 'clip-reset', reset_timings)
+end
+
+local function unbind_keys()
+	if not keys_bound then return end
+	keys_bound = false
+	mp.remove_key_binding('clip-start')
+	mp.remove_key_binding('clip-end')
+	mp.remove_key_binding('clip-reset')
+end
+
 local function open()
+	bind_keys()
 	mp.commandv('script-message-to', 'uosc', 'open-menu', menu())
 end
 
@@ -309,16 +346,17 @@ end
 
 mp.register_script_message('menu-event', function(json)
 	local e = utils.parse_json(json) or {}
+	if e.type == 'close' then
+		unbind_keys()
+		return
+	end
 	if e.type ~= 'activate' then return end
 	if e.value == 'start' then
-		timings.start = mp.get_property_number('time-pos')
-		update()
+		set_start()
 	elseif e.value == 'end' then
-		timings.stop = mp.get_property_number('time-pos')
-		update()
+		set_end()
 	elseif e.value == 'reset' then
-		timings = {}
-		update()
+		reset_timings()
 	elseif e.value == 'folder' then
 		ask_folder()
 	elseif e.value == 'audio' then
