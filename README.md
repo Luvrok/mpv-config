@@ -20,17 +20,22 @@ pin a commit of this repo and add both files on top of `portable_config`.
 - `find.lua` - a fuzzy finder (`Ctrl+p`) over `~/downloads`, `~/documents/videos` and `/media/outer-1` (`script-opts/find.conf` takes `roots`), newest first, in a uosc palette menu. `Enter` plays, `Shift+Enter` queues.
 - `layout.lua` - binds every `input.conf` key once more for the russian layout, at the same physical key (`р` for `h`, `п-п` for `g-g`). Searches also try what was typed as the other layout's keys.
 - `resume.lua` - with `save-position-on-quit=yes` every quit resumes, closing the window too. This drops the saved position at the end of a file, so a finished one starts over.
+- `clip.lua` - `c` cuts a clip without re-encoding. `s` start, `e` end, the menu picks the output folder, the audio track and the subtitles (or none). See [Clips](#clips).
 
 The dotfiles add these from nixpkgs (`mpvScripts`), their settings are in
 `script-opts` here:
 
 - [mpris](https://github.com/hoyon/mpv-mpris) - the desktop's media controls see mpv.
-- [videoclip](https://github.com/Ajatt-Tools/videoclip) - `c` cuts a clip: `s` start, `e` end, `c` save. 1080p H.264 to the XDG videos folder, visible subtitles burned in.
 - [SmartSkip](https://github.com/Eisa01/mpv-scripts) - `>` skips an opening or ending (or to the next silence without chapters). It only prompts, never skips by itself, `Ctrl+.` turns the prompts off.
 - [autosubsync](https://github.com/joaquintorres/autosubsync-mpv) - `n` syncs subtitles to the audio with ffsubsync.
 - [reload](https://github.com/4e6/mpv-reload) - `r` reopens the file at the same spot, and stuck streams by itself.
 - [UndoRedo](https://github.com/Eisa01/mpv-scripts) - `Ctrl+o` / `Ctrl+i` go back and forth between seeks, like vim's jumplist.
 - [subtitle-lines](https://github.com/christoph-heinrich/mpv-subtitle-lines) - `/` lists the subtitle lines in a uosc menu, enter jumps to one.
+
+`clip.lua` replaces [videoclip](https://github.com/Ajatt-Tools/videoclip),
+which nixpkgs still installs and which binds the same `c`. Drop `videoclip`
+from `mpvScripts` in the dotfiles, or set another `key` in
+`script-opts/clip.conf`.
 
 ## uosc patches
 
@@ -60,6 +65,24 @@ A binding without a comment isn't on the sheet. Bindings of a section with the
 same comment share a row (`h / l / ← / →  back / forward 5 s`), `g-g` is the
 sequence `g g`. The `#!` part is uosc's menu entry, a line starting with `#`
 is a menu entry without a key.
+
+## Clips
+
+`c` opens the clip menu. `s` and `e` take the current time as the start and
+the end, the menu picks the folder, the audio track and the subtitles
+(`none` is a choice, so a clip can have no sound or no subtitles). Enter on
+"Create clip" runs ffmpeg and the clip appears in the folder. The folder is
+remembered in `~/.local/state/mpv/clip-output`, the defaults are in
+`script-opts/clip.conf` (`~/documents/videos`, `%n_%s-%e.mkv`).
+
+Nothing is re-encoded: video, audio, subtitles and attached fonts are copied
+stream by stream, so the picture and the sound are bit-identical to the
+source. The price of a copy is that a stream can start only at a keyframe, so
+the clip can open a few seconds before the chosen start (the end is exact).
+An external subtitle file is seeked to the same keyframe, so it stays in sync.
+
+The output is always `.mkv`: it holds any codec the source has, subtitle
+formats and their fonts included.
 
 ## Profiles
 
