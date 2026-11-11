@@ -19,7 +19,7 @@ pin a commit of this repo and add both files on top of `portable_config`.
 - `keys.lua` - the hotkey cheat sheet (`?`), made from the comments in `input.conf`, in uosc's menu look. It opens typing a search, `Enter` keeps the result and lets keys through to try them, `Esc` clears, then closes.
 - `find.lua` - a fuzzy finder (`Ctrl+p`) over `~/downloads`, `~/documents/videos` and `/media/outer-1` (`script-opts/find.conf` takes `roots`), newest first, in a uosc palette menu. `Enter` plays, `Shift+Enter` queues.
 - `layout.lua` - binds every `input.conf` key once more for the russian layout, at the same physical key (`р` for `h`, `п-п` for `g-g`). Searches also try what was typed as the other layout's keys.
-- `resume.lua` - with `save-position-on-quit=yes` every quit resumes, closing the window too. This drops the saved position at the end of a file, so a finished one starts over.
+- `resume.lua` - `q` saves where the file stopped; closing the window or killing mpv does not. At the end of a file `q` starts it over next time (`Q` never saves).
 - `clip.lua` - `c` cuts a clip without re-encoding. `s` start, `e` end, the menu picks the output folder, the audio track and the subtitles (or none). See [Clips](#clips).
 
 The dotfiles add these from nixpkgs (`mpvScripts`), their settings are in

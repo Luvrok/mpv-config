@@ -1,12 +1,17 @@
--- resume: mpv.conf saves the position on every quit, so closing the window
--- (hyprland's killactive, the close button, pkill before suspend) resumes
--- like q does. with keep-open the end of a file is a position too, and the
--- next open would start there: at the end the saved position is dropped
+-- resume: q saves where the file stopped, closing the window or killing mpv
+-- does not (mpv.conf has save-position-on-quit=no). q at the end of a file
+-- drops the position instead, so a finished one starts over next time
 
-local save = mp.get_property_bool('save-position-on-quit')
+local function quit(save)
+	mp.set_property_bool('save-position-on-quit', save)
+	if not save then mp.command('delete-watch-later-config') end
+	mp.command('quit')
+end
 
-mp.observe_property('eof-reached', 'bool', function(_, eof)
-	if not save then return end
-	mp.set_property_bool('save-position-on-quit', not eof)
-	if eof then mp.command('delete-watch-later-config') end
+mp.add_key_binding(nil, 'quit-save', function()
+	local duration = mp.get_property_number('duration') or 0
+	local position = mp.get_property_number('time-pos') or 0
+	local at_end = mp.get_property_bool('eof-reached')
+		or (duration > 0 and position >= duration - 1)
+	quit(not at_end)
 end)
