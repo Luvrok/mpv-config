@@ -203,6 +203,8 @@ local function unbind_keys()
 end
 
 local function open()
+	-- the tracks are read from mpv on every open
+	sel = {}
 	bind_keys()
 	mp.commandv('script-message-to', 'uosc', 'open-menu', menu())
 end
@@ -348,6 +350,8 @@ mp.register_script_message('menu-event', function(json)
 	local e = utils.parse_json(json) or {}
 	if e.type == 'close' then
 		unbind_keys()
+		-- with on_close='callback' uosc waits for the script to close it
+		mp.commandv('script-message-to', 'uosc', 'close-menu', 'clip')
 		return
 	end
 	if e.type ~= 'activate' then return end

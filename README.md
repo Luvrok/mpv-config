@@ -69,11 +69,12 @@ is a menu entry without a key.
 ## Clips
 
 `c` opens the clip menu. `s` and `e` take the current time as the start and
-the end, the menu picks the folder, the audio track and the subtitles
-(`none` is a choice, so a clip can have no sound or no subtitles). Enter on
-"Create clip" runs ffmpeg and the clip appears in the folder. The folder is
-remembered in `~/.local/state/mpv/clip-output`, the defaults are in
-`script-opts/clip.conf` (`~/documents/videos`, `%n_%s-%e.mkv`).
+the end, `Esc` closes. The audio and the subtitles start from the tracks mpv
+has selected at that moment; the menu cycles them, `none` included, so a clip
+can have no sound or no subtitles. Enter on "Create clip" runs ffmpeg and the
+clip appears in the folder. The folder is remembered in
+`~/.local/state/mpv/clip-output`, the defaults are in `script-opts/clip.conf`
+(`~/documents/videos`, `%n_%s-%e.mkv`).
 
 Nothing is re-encoded: video, audio, subtitles and attached fonts are copied
 stream by stream, so the picture and the sound are bit-identical to the
