@@ -72,9 +72,13 @@ is a menu entry without a key.
 the end, `Esc` closes. The audio and the subtitles start from the tracks mpv
 has selected at that moment; the menu cycles them, `none` included, so a clip
 can have no sound or no subtitles. Enter on "Create clip" runs ffmpeg and the
-clip appears in the folder. The folder is remembered in
-`~/.local/state/mpv/clip-output`, the defaults are in `script-opts/clip.conf`
-(`~/documents/videos`, `%n_%s-%e.mkv`).
+clip appears in the folder.
+
+The folder item opens a picker: the XDG Videos, Downloads and Documents, the
+subfolders of where you are, `..`, or a typed path, then "Use this folder". The
+choice is remembered in `~/.local/state/mpv/clip-output`. Until one is picked
+the XDG videos folder is used; `script-opts/clip.conf` can pin another one
+(`output_folder`), the name is `%n_%s-%e.mkv`.
 
 Nothing is re-encoded: video, audio, subtitles and attached fonts are copied
 stream by stream, so the picture and the sound are bit-identical to the

@@ -2,7 +2,8 @@
 -- re-encoded, so the picture and the sound stay bit-identical. s and e take
 -- the current time as the start and the end, a track can be picked for the
 -- audio and the subtitles (or none of them), and the folder the clip goes to
--- is picked right in the menu too. the file is always an mkv, it holds any
+-- is picked in a browser over the XDG folders and the disk. the file is
+-- always an mkv, it holds any
 -- codec the source has, subtitles and attached fonts included. copy means the
 -- cut starts at the keyframe before the chosen time: the clip can open a few
 -- seconds early, nothing is lost to an encoder
@@ -21,15 +22,36 @@ local o = {
 require('mp.options').read_options(o, 'clip')
 
 local script = mp.get_script_name()
-local state_dir = mp.command_native({'expand-path', '~~state'})
-local folder_file = state_dir .. '/clip-output'
-local paths_file = state_dir .. '/clip-paths'
 local timings = {}
 local sel = {}
+local home = mp.command_native({'expand-path', '~'})
+local folder_current = home
+local folder_typing = false
 
-mp.command_native({name = 'subprocess', args = {'mkdir', '-p', state_dir}, playback_only = false})
+-- ~~ only expands once the player is up, so the state paths are made on use
+local function state_path(name)
+	return mp.command_native({'expand-path', '~~state/' .. name})
+end
 
 local function trim(s) return (s:gsub('^%s+', ''):gsub('%s+$', '')) end
+
+-- the folders from ~/.config/user-dirs.dirs, so the menu offers the same
+-- Videos, Downloads and Documents the desktop does
+local function xdg_dirs()
+	local dirs = {}
+	local f = io.open(home .. '/.config/user-dirs.dirs', 'r')
+	if not f then return dirs end
+	for line in f:lines() do
+		local key, value = line:match('^%s*XDG_([%u_]+)_DIR%s*=%s*"(.*)"%s*$')
+		if key and value ~= '' then
+			dirs[key:lower()] = (value:gsub('%$HOME', home))
+		end
+	end
+	f:close()
+	return dirs
+end
+
+local xdg = xdg_dirs()
 
 local function notify(msg, duration)
 	mp.osd_message(msg, duration or 4)
@@ -40,16 +62,22 @@ local function error_text(res, err)
 	return trim(text):gsub('%s+', ' ')
 end
 
--- the folder picked last time, else the config default
+-- the folder picked last time, else the config default, else the XDG videos
 local function output_folder()
-	local f = io.open(folder_file, 'r')
-	local saved = f and trim(f:read('*a') or '')
+	local f = io.open(state_path('clip-output'), 'r')
+	local saved = f and trim(f:read('*a') or '') or ''
 	if f then f:close() end
-	return mp.command_native({'expand-path', saved ~= '' and saved or o.output_folder})
+	if saved ~= '' then return mp.command_native({'expand-path', saved}) end
+	if o.output_folder and o.output_folder ~= '' then
+		return mp.command_native({'expand-path', o.output_folder})
+	end
+	return xdg.videos or home
 end
 
 local function remember_folder(path)
-	local f = io.open(folder_file, 'w')
+	local file = state_path('clip-output')
+	mp.command_native({name = 'subprocess', args = {'mkdir', '-p', file:match('^(.*)/[^/]*$')}, playback_only = false})
+	local f = io.open(file, 'w')
 	if f then
 		f:write(path .. '\n')
 		f:close()
@@ -57,7 +85,6 @@ local function remember_folder(path)
 end
 
 local function pretty_path(path)
-	local home = mp.command_native({'expand-path', '~'})
 	if path == home then return '~' end
 	if path:sub(1, #home + 1) == home .. '/' then return '~' .. path:sub(#home + 1) end
 	return path
@@ -209,30 +236,141 @@ local function open()
 	mp.commandv('script-message-to', 'uosc', 'open-menu', menu())
 end
 
-local function ask_folder()
-	-- the menu closes first, the console takes the keys
+local function normalize_path(path)
+	path = path:gsub('/+$', '')
+	return path ~= '' and path or '/'
+end
+
+local function parent_of(path)
+	local parent = path:match('^(.*)/[^/]*$')
+	return parent ~= '' and parent or '/'
+end
+
+-- the folder picker: the XDG shortcuts, the subfolders of where we are, and
+-- "use this folder"
+local function folder_menu()
+	local items = {
+		{title = 'Use this folder', hint = pretty_path(folder_current), value = 'use', bold = true},
+		{title = 'Type a path', value = 'type'},
+	}
+	if folder_current ~= '/' then
+		items[#items + 1] = {title = '..', hint = pretty_path(parent_of(folder_current)), value = 'up', keep_open = true}
+	end
+	items[#items + 1] = {separator = true}
+
+	local seen = {}
+	for _, pair in ipairs({
+		{'Videos (XDG)', xdg.videos},
+		{'Downloads (XDG)', xdg.download},
+		{'Documents (XDG)', xdg.documents},
+		{'Home', home},
+	}) do
+		local label, path = pair[1], pair[2]
+		if path and path ~= '' and path ~= folder_current and not seen[path] then
+			seen[path] = true
+			local info = utils.file_info(path)
+			if info and info.is_dir then
+				items[#items + 1] = {title = label, hint = pretty_path(path), value = 'go:' .. path, keep_open = true}
+			end
+		end
+	end
+	items[#items + 1] = {separator = true}
+
+	local shown = 0
+	local dirs = utils.readdir(folder_current, 'dirs')
+	if dirs then
+		table.sort(dirs, function(a, b) return a:lower() < b:lower() end)
+		for _, name in ipairs(dirs) do
+			if name:sub(1, 1) ~= '.' then
+				items[#items + 1] = {title = name, value = 'go:' .. folder_current .. '/' .. name, keep_open = true}
+				shown = shown + 1
+			end
+		end
+	end
+	if shown == 0 then
+		items[#items + 1] = {title = 'No folders here', selectable = false, muted = true, italic = true}
+	end
+
+	return utils.format_json({
+		type = 'clip-folder',
+		title = 'Clip folder',
+		on_close = 'callback',
+		callback = {script, 'folder-event'},
+		items = items,
+	})
+end
+
+local function update_folder()
+	mp.commandv('script-message-to', 'uosc', 'update-menu', folder_menu())
+end
+
+local function open_folder()
+	folder_current = normalize_path(output_folder())
+	local info = utils.file_info(folder_current)
+	if not info or not info.is_dir then folder_current = xdg.videos or home end
+	mp.add_timeout(0.05, function()
+		mp.commandv('script-message-to', 'uosc', 'open-menu', folder_menu())
+	end)
+end
+
+local function ask_path()
 	mp.add_timeout(0.05, function()
 		local answered = false
 		local function done()
 			if answered then return end
 			answered = true
-			-- closed cancels, it must not save what was typed
-			open()
+			mp.add_timeout(0.05, function()
+				mp.commandv('script-message-to', 'uosc', 'open-menu', folder_menu())
+			end)
 		end
 		input.get({
 			prompt = 'Output folder: ',
-			default_text = output_folder(),
-			history_path = paths_file,
+			default_text = folder_current,
+			history_path = state_path('clip-paths'),
 			submit = function(text)
 				if answered then return end
 				text = trim(text or '')
-				if text ~= '' then remember_folder(text) end
+				if text ~= '' then
+					local path = normalize_path(mp.command_native({'expand-path', text}))
+					local info = utils.file_info(path)
+					if info and info.is_dir then
+						folder_current = path
+					else
+						notify('Clip: no folder ' .. text, 4)
+					end
+				end
 				done()
 			end,
 			closed = done,
 		})
 	end)
 end
+
+mp.register_script_message('folder-event', function(json)
+	local e = utils.parse_json(json) or {}
+	if e.type == 'close' then
+		mp.commandv('script-message-to', 'uosc', 'close-menu', 'clip-folder')
+		if folder_typing then
+			folder_typing = false
+		else
+			mp.add_timeout(0.05, open)
+		end
+		return
+	end
+	if e.type ~= 'activate' then return end
+	if e.value == 'use' then
+		remember_folder(folder_current)
+	elseif e.value == 'up' then
+		folder_current = parent_of(folder_current)
+		update_folder()
+	elseif e.value == 'type' then
+		folder_typing = true
+		ask_path()
+	elseif e.value and e.value:sub(1, 3) == 'go:' then
+		folder_current = normalize_path(e.value:sub(4))
+		update_folder()
+	end
+end)
 
 -- the frame-exact start is impossible without re-encoding, ffmpeg starts a
 -- copied stream at the keyframe before the time; knowing it lets the external
@@ -362,7 +500,7 @@ mp.register_script_message('menu-event', function(json)
 	elseif e.value == 'reset' then
 		reset_timings()
 	elseif e.value == 'folder' then
-		ask_folder()
+		open_folder()
 	elseif e.value == 'audio' then
 		cycle('audio')
 		update()
